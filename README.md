@@ -1,6 +1,7 @@
-# Technology Stack
-## React - Redux - Typescript
+## Technology Stack
+React - Redux - Typescript
 
-# How to Start?
-## yarn | npm install
-## npm start
+## How to Start?
+yarn | npm install
+
+npm start
