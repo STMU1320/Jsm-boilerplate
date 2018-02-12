@@ -3,9 +3,11 @@ import * as fs from 'fs';
 import * as express from 'express';
 import * as webpack from 'webpack';
 import * as http from 'http';
+import * as net from 'net';
 import * as os from 'os';
 import chalk from 'chalk';
 import { exec } from 'child_process';
+import { error } from 'util';
 
 const cors = require<any>('cors');
 const serveStatic = require<any>('serve-static');
@@ -15,6 +17,11 @@ const morgan = require<any>('morgan');
 
 const __DEV__ = process.env.NODE_ENV !== 'production';
 const joinDirname = (...paths: string[]) => path.join(__dirname, '../', ...paths);
+
+function getValidNet(keys: any) {
+  const validKey = keys.find((key: string) => os.networkInterfaces()[key]);
+  return validKey && os.networkInterfaces()[validKey];
+}
 
 let { dist, publicPath, hostName, port }: {
   dist: string;
@@ -84,17 +91,31 @@ app.use('/', (req: express.Request, res: express.Response) => {
   res.sendFile(joinDirname(`./${dist}/index.html`));
 });
 
-http.createServer(app)
-  .listen(port, __DEV__ ? '0.0.0.0' : hostName, (err: Error) => {
-    if (err) {
-      console.error('error is ', err);
-      process.exit(1);
+
+const httpServer = http.createServer(app);
+const hn = __DEV__ ? '0.0.0.0' : hostName;
+
+httpServer.listen(port, hn);
+
+httpServer.on('listening', () => {
+  const net = getValidNet(['WLAN', '以太网', 'en0', 'en1']);
+  const ipv4 = net && net.find((item: any) => item.family === 'IPv4').address;
+  console.log(`${__DEV__ ? 'Dev' : 'Prod'}Server run on ${chalk.yellow.bold(`http://${hostName}:${port}`)}`);
+  ipv4 && console.log(`Local area network on ${chalk.yellow.bold(`http://${ipv4}:${port}`)}`);
+});
+
+httpServer.on('error', (e: any) => {
+  const maxPort = 49152;
+  if (e.code === 'EADDRINUSE') {
+    port = +e.port + 1;
+    if (port < maxPort) {
+      console.log(`Port ${e.port} in use, restart server on port ${port}`);
+      setTimeout(() => {
+        httpServer.close();
+        httpServer.listen(port, hn);
+      }, 1000);
+    } else {
+      console.log(e);
     }
-    const net = (function getValidNet (keys: any) {
-      const validKey = keys.find((key: string) => os.networkInterfaces()[key])
-      return validKey && os.networkInterfaces()[validKey]
-    })(['WLAN', '以太网', 'en0', 'en1']);
-    const ipv4 = net && net.find((item: any) => item.family === 'IPv4').address;
-    console.log(`${__DEV__ ? 'Dev' : 'Prod'}Server run on ${chalk.yellow.bold(`http://${hostName}:${port}`)}`);
-    ipv4 && console.log(`Local area network on ${chalk.yellow.bold(`http://${ipv4}:${port}`)}`);
-  });
+  }
+});
